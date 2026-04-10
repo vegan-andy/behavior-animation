@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Safe Robot Behaviors — Corner-to-Corner AP Visual Reference</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#fff;--bg2:#f5f4f0;--tx:#2c2c2a;--tx2:#888780;--tx3:#b4b2a9;--bdr:#dddcd7;--info-bg:#E6F1FB;--info-tx:#0C447C;--ok-bg:#EAF3DE;--ok-tx:#27500A;--err-bg:#FCEBEB;--err-tx:#791F1F;--sw:#e8e6df;--curb:#d3d1c7;--road:#c8c6bf;--bld:#d8d6cf;--robot:#1D9E75;--robotS:#0F6E56;--ped:#7F77DD;--child:#D4537E;--car:#BA7517;--dng:rgba(226,75,74,.1);--dngS:#E24B4A;--pth:rgba(29,158,117,.4);--constr:#BA7517;--veg:#639922;--scoot:#378ADD;--blk:#888780}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1a18;--bg2:#2a2a28;--tx:#e0ded6;--tx2:#888780;--tx3:#5f5e5a;--bdr:#444441;--info-bg:#042C53;--info-tx:#85B7EB;--ok-bg:#173404;--ok-tx:#C0DD97;--err-bg:#501313;--err-tx:#F7C1C1;--sw:#2a2a28;--curb:#444441;--road:#1e1e1c;--bld:#333330;--robot:#5DCAA5;--robotS:#9FE1CB;--ped:#AFA9EC;--child:#ED93B1;--car:#FAC775;--dng:rgba(226,75,74,.15);--dngS:#F09595;--pth:rgba(93,202,165,.5);--constr:#EF9F27;--veg:#97C459;--scoot:#85B7EB;--blk:#B4B2A9}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);padding:24px;max-width:780px;margin:0 auto}
+h1{font-size:20px;font-weight:500;margin-bottom:4px}
+.sub{font-size:13px;color:var(--tx2);margin-bottom:20px}
+.nav{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px}
+.nav-btn{padding:6px 12px;font-size:12px;cursor:pointer;border-radius:8px;border:1px solid var(--bdr);background:transparent;color:var(--tx2);transition:all .15s;white-space:nowrap;font-family:inherit}
+.nav-btn:hover{background:var(--bg2)}
+.nav-btn.active{background:var(--info-bg);color:var(--info-tx);border-color:var(--info-tx)}
+#stitle{font-size:16px;font-weight:500;margin-bottom:6px}
+canvas{width:100%;border-radius:12px;border:1px solid var(--bdr);display:block;margin-bottom:10px}
+#desc{font-size:13px;color:var(--tx2);line-height:1.6;margin-bottom:10px;min-height:40px}
+.tags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tag{padding:4px 10px;border-radius:8px;font-size:11px;line-height:1.4}
+.tag-do{background:var(--ok-bg);color:var(--ok-tx)}
+.tag-dont{background:var(--err-bg);color:var(--err-tx)}
+.ctrl{display:flex;gap:8px;align-items:center;margin-bottom:24px}
+.ctrl button{padding:5px 14px;font-size:12px;border-radius:8px;border:1px solid var(--bdr);background:transparent;color:var(--tx);cursor:pointer;font-family:inherit}
+.ctrl button:hover{background:var(--bg2)}
+#status{font-size:11px;color:var(--tx3)}
+.footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--bdr);font-size:11px;color:var(--tx3);line-height:1.6}
+</style>
+</head>
+<body>
+<h1>Safe robot behaviors in autopilot — corner-to-corner</h1>
+<p class="sub">Animated visual reference for each scenario in the RFC. Tap a scenario to watch.</p>
+<div class="nav">
+<button class="nav-btn active" onclick="go(0)">2.1 Normal cruise</button>
+<button class="nav-btn" onclick="go(1)">2.2 Passing VRUs</button>
+<button class="nav-btn" onclick="go(2)">2.3 Occlusions</button>
+<button class="nav-btn" onclick="go(3)">2.4 Driveways</button>
+<button class="nav-btn" onclick="go(4)">2.5 Narrow/crowded</button>
+<button class="nav-btn" onclick="go(5)">2.6 Construction</button>
+<button class="nav-btn" onclick="go(6)">2.7 Micromobility</button>
+<button class="nav-btn" onclick="go(7)">2.8 Temp blockage</button>
+<button class="nav-btn" onclick="go(8)">2.9 Vegetation</button>
+</div>
+<div id="stitle"></div>
+<canvas id="c" width="680" height="300"></canvas>
+<div id="desc"></div>
+<div class="tags">
+<span class="tag tag-do" id="do-tag"></span>
+<span class="tag tag-dont" id="dont-tag"></span>
+</div>
+<div class="ctrl">
+<button onclick="replay()">Replay</button>
+<button onclick="prev()">Prev</button>
+<button onclick="next()">Next</button>
+<span id="status"></span>
+</div>
+<div class="footer">
+Visual reference for RFC: Safe Robot Behaviors in Autopilot (AP), Corner-to-Corner.<br>
+Section 3 (sensor faults): All scenarios — decelerate to controlled stop, enter failsafe. No AP re-entry until cleared.
+</div>
+<script>
+const cv=document.getElementById('c'),cx=cv.getContext('2d');
+const W=680,H=300;
+let cur=0,raf=null,t=0;
+const s=getComputedStyle(document.documentElement);
+function c(v){return s.getPropertyValue(v).trim()}
+
+function C(){return{
+sw:c('--sw'),curb:c('--curb'),road:c('--road'),bld:c('--bld'),
+robot:c('--robot'),robotS:c('--robotS'),ped:c('--ped'),child:c('--child'),
+car:c('--car'),dng:c('--dng'),dngS:c('--dngS'),pth:c('--pth'),
+constr:c('--constr'),veg:c('--veg'),scoot:c('--scoot'),blk:c('--blk'),
+tx2:c('--tx2'),tx3:c('--tx3')
+}}
+
+function bg(){let cl=C();
+cx.fillStyle=cl.road;cx.fillRect(0,0,W,H);
+cx.fillStyle=cl.sw;cx.fillRect(0,30,W,240);
+cx.fillStyle=cl.curb;cx.fillRect(0,268,W,4);cx.fillRect(0,28,W,4);
+cx.fillStyle=cl.bld;cx.fillRect(0,0,W,28);
+cx.fillStyle=cl.road;cx.fillRect(0,272,W,28);
+cx.strokeStyle=cl.curb;cx.lineWidth=.5;cx.setLineDash([6,6]);cx.beginPath();cx.moveTo(0,286);cx.lineTo(W,286);cx.stroke();cx.setLineDash([]);
+}
+function robot(x,y,a){let cl=C();cx.save();cx.translate(x,y);if(a)cx.rotate(a);
+cx.fillStyle=cl.robot;cx.strokeStyle=cl.robotS;cx.lineWidth=1.5;cx.beginPath();cx.roundRect(-18,-12,36,24,5);cx.fill();cx.stroke();
+cx.fillStyle='#fff';cx.font='500 10px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText('BOT',0,0);cx.restore();}
+function ped(x,y,r){r=r||8;cx.fillStyle=C().ped;cx.beginPath();cx.arc(x,y,r,0,Math.PI*2);cx.fill();}
+function chld(x,y){cx.fillStyle=C().child;cx.beginPath();cx.arc(x,y,6,0,Math.PI*2);cx.fill();}
+function car(x,y,w,h){cx.fillStyle=C().car;cx.beginPath();cx.roundRect(x,y,w||60,h||28,4);cx.fill();}
+function dz(x,y,w,h){let cl=C();cx.fillStyle=cl.dng;cx.strokeStyle=cl.dngS;cx.lineWidth=.5;cx.setLineDash([4,4]);cx.beginPath();cx.roundRect(x,y,w,h,6);cx.fill();cx.stroke();cx.setLineDash([]);}
+function lbl(t,x,y){cx.fillStyle=C().tx2;cx.font='11px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(t,x,y);}
+function pth(pts,col){cx.strokeStyle=col||C().pth;cx.lineWidth=2;cx.setLineDash([6,4]);cx.beginPath();cx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)cx.lineTo(pts[i][0],pts[i][1]);cx.stroke();cx.setLineDash([]);}
+function cone(x,y){cx.fillStyle=C().constr;cx.beginPath();cx.moveTo(x,y);cx.lineTo(x-6,y+12);cx.lineTo(x+6,y+12);cx.closePath();cx.fill();}
+function bush(x,y,w,h){cx.fillStyle=C().veg;cx.globalAlpha=.5;for(let i=0;i<3;i++){cx.beginPath();cx.ellipse(x+i*(w/3),y,w/4,h/2,0,0,Math.PI*2);cx.fill();}cx.globalAlpha=1;}
+function e(v){return v<.5?2*v*v:1-Math.pow(-2*v+2,2)/2}
+
+const scenes=[
+{title:'2.1 Normal sidewalk cruising',desc:'Robot follows lane policy with smooth, low-jerk trajectory. Maintains margin from sidewalk edges and curb drop-offs. Speed governed by safe-stop math (day vs night, environment type).',
+doTxt:'Smooth center/right lane, respect speed caps, maintain edge margin',dontTxt:'Ping-pong between lanes, hug curb near drop-offs',dur:4000,
+draw(p){bg();let cl=C();cx.strokeStyle=cl.pth;cx.lineWidth=1;cx.setLineDash([8,6]);cx.globalAlpha=.4;cx.beginPath();cx.moveTo(0,160);cx.lineTo(W,160);cx.stroke();cx.setLineDash([]);cx.globalAlpha=1;
+lbl('Lane center',620,150);dz(0,252,W,20);lbl('Edge hazard zone',100,262);dz(0,30,W,16);lbl('Edge hazard zone',560,38);
+robot(40+e(p)*560,160);lbl('Direction of travel \u2192',340,20);}},
+
+{title:'2.2 Passing pedestrians and VRUs',desc:'Robot detects humans and VRUs early, slows as separation shrinks, maintains minimum lateral clearance. Prefers single-shot pass over micro-overtakes. When in doubt: yield \u2192 trail \u2192 stop. Children always trigger conservative stopping/creeping.',
+doTxt:'Slow early, wide berth, single-shot pass, yield when in doubt',dontTxt:'Fast close pass, micro-overtakes, weaving in and out',dur:6000,
+draw(p){bg();ped(380,110);ped(400,135);chld(415,155);lbl('Pedestrians',440,110);lbl('Child',445,155);dz(355,85,85,90);
+let ph=p<.4?0:p<.7?1:2,rx,ry;
+if(ph===0){let pp=p/.4;rx=60+e(pp)*200;ry=160;}
+else if(ph===1){let pp=(p-.4)/.3;rx=260+e(pp)*160;ry=160+e(pp)*60;}
+else{let pp=(p-.7)/.3;rx=420+e(pp)*180;ry=220-e(pp)*50;}
+pth([[60,160],[260,160],[420,220],[600,170]]);robot(rx,ry);
+if(ph===0&&p>.2)lbl('Slowing...',rx,ry-22);if(ph===1)lbl('Wide clearance',rx,ry-22);}},
+
+{title:'2.3 Occlusions: doors, parked cars, seating',desc:'Robot treats doors, parked vehicles, and outdoor seating as potential agent emergence zones. Reduces speed on approach, increases lateral separation, and is prepared to stop before entering predicted conflict paths.',
+doTxt:'Slow near occlusions, bias away, prepare to stop',dontTxt:'Stop indefinitely for minor navigable static clutter',dur:6000,
+draw(p){bg();let cl=C();cx.fillStyle=cl.bld;cx.fillRect(160,0,40,30);lbl('Door',180,15);
+car(350,250,65,22);lbl('Parked car',382,246);cx.fillStyle=cl.curb;cx.fillRect(520,32,50,20);lbl('Seating',545,60);
+dz(145,28,70,60);dz(335,230,95,50);dz(510,28,70,50);lbl('Emergence zone',180,98);
+let rx,ry;if(p<.3){let pp=p/.3;rx=40+e(pp)*120;ry=170;}
+else if(p<.55){let pp=(p-.3)/.25;rx=160+e(pp)*170;ry=170+e(pp)*40;}
+else if(p<.8){let pp=(p-.55)/.25;rx=330+e(pp)*170;ry=210-e(pp)*30;}
+else{let pp=(p-.8)/.2;rx=500+e(pp)*130;ry=180-e(pp)*20;}
+pth([[40,170],[160,170],[330,210],[500,180],[630,160]]);robot(rx,ry);
+if(p>.15&&p<.35)lbl('Slowing',rx,ry-22);}},
+
+{title:'2.4 Driveways, parking lots, and garages',desc:'Driveways and garage openings are vehicle emergence zones. Robot slows, biases lane away from opening, and positions itself to be visible to drivers. If conflict predicted: stop in non-blocking pose before the opening, then re-plan or request help.',
+doTxt:'Slow, bias away from opening, stay visible to drivers',dontTxt:'Cruise through at nominal speed with active traffic nearby',dur:7000,
+draw(p){bg();let cl=C();cx.fillStyle=cl.road;cx.fillRect(280,0,120,32);cx.fillStyle=cl.bld;cx.fillRect(0,0,280,28);cx.fillRect(400,0,280,28);
+lbl('Driveway / garage',340,14);dz(270,30,140,80);lbl('Vehicle emergence zone',340,120);
+let cp=Math.max(0,Math.min(1,(p-.35)/.3));if(p>.35)car(310-e(cp)*20,10+e(cp)*40,50,24);
+let rx,ry;if(p<.35){let pp=p/.35;rx=40+e(pp)*200;ry=160+e(pp)*40;}
+else if(p<.6){rx=240;ry=200;let pp=(p-.35)/.25;if(pp<.3)lbl('Stopping!',rx,ry-22);else lbl('Waiting for vehicle...',rx,ry-22);}
+else{let pp=(p-.6)/.4;rx=240+e(pp)*380;ry=200+e(pp)*20;}
+pth([[40,160],[240,200],[620,220]]);robot(rx,ry);}},
+
+{title:'2.5 Narrow sidewalks and crowded segments',desc:'On narrow or crowded sidewalks, robot reduces target speed, increases buffering to pedestrians on both sides, and prefers trailing behind groups at safe headway rather than aggressive overtaking.',
+doTxt:'Slow down, trail behind at safe headway, buffer both sides',dontTxt:'Zig-zag through dense groups, hug curb edge',dur:6000,
+draw(p){let cl=C();cx.fillStyle=cl.road;cx.fillRect(0,0,W,H);cx.fillStyle=cl.sw;cx.fillRect(0,80,W,140);cx.fillStyle=cl.curb;cx.fillRect(0,78,W,4);cx.fillRect(0,218,W,4);cx.fillStyle=cl.bld;cx.fillRect(0,0,W,78);cx.fillStyle=cl.road;cx.fillRect(0,222,W,78);
+lbl('Narrow sidewalk',340,70);let gx=300+p*120;ped(gx,130);ped(gx+20,155);ped(gx+40,140);ped(gx-10,165);ped(gx+55,160);lbl('Pedestrian group',gx+20,185);
+let rx=gx-90;robot(rx,150);cx.strokeStyle=cl.tx2;cx.setLineDash([3,3]);cx.lineWidth=.5;cx.beginPath();cx.moveTo(rx+18,150);cx.lineTo(gx-18,150);cx.stroke();cx.setLineDash([]);
+lbl('Safe headway',rx+45,138);lbl('Trailing \u2014 not passing',rx+45,200);}},
+
+{title:'2.6 Construction zones and temporary closures',desc:'Robot slows for construction, increases clearance to cones, barriers, and workers. If the zone fully blocks the mapped STA: controlled stop at non-blocking position, then request help. Never enters unsafe zones (trenches, scaffolding, open pits).',
+doTxt:'Slow, increase clearance, stop + request help if fully blocked',dontTxt:'Enter unsafe zones, bypass SIDEWALK CLOSED signs autonomously',dur:6000,
+draw(p){bg();let cl=C();cx.fillStyle=cl.dng;cx.fillRect(300,30,160,240);cx.strokeStyle=cl.constr;cx.lineWidth=1;cx.setLineDash([5,3]);cx.strokeRect(300,30,160,240);cx.setLineDash([]);
+cone(320,100);cone(350,140);cone(380,100);cone(440,130);cone(410,170);
+cx.fillStyle=cl.constr;cx.font='500 12px sans-serif';cx.textAlign='center';cx.fillText('CONSTRUCTION',380,80);
+cx.fillStyle=cl.curb;cx.fillRect(330,180,100,40);lbl('Barrier',380,200);
+let rx,ry;if(p<.4){let pp=p/.4;rx=40+e(pp)*210;ry=160;}else{rx=250;ry=160;}
+pth([[40,160],[250,160]]);robot(rx,ry);
+if(p>=.4){cx.fillStyle=cl.dngS;cx.beginPath();cx.arc(rx+30,ry,4,0,Math.PI*2);cx.fill();lbl('Controlled stop',rx,ry-24);
+if(p>.6){let blink=Math.sin(p*20)>0;if(blink){cx.fillStyle=cl.dngS;cx.font='500 11px sans-serif';cx.textAlign='center';cx.fillText('Requesting help...',rx,ry+28);}}}}},
+
+{title:'2.7 Shared sidewalk with micromobility',desc:'Scooters and bikes are treated as faster, higher-momentum agents. Robot increases longitudinal and lateral buffers, maintains stable lane so approaching riders have a predictable path. On narrow sidewalks: slow to near-crawl or stop, let human choose path first.',
+doTxt:'Stable lane, increased buffers, yield when intent is ambiguous',dontTxt:'Sudden lateral moves into a fast-approaching rider\'s path',dur:6000,
+draw(p){bg();let cl=C();let scX=620-e(Math.min(1,p*1.5))*500;
+cx.fillStyle=cl.scoot;cx.save();cx.translate(scX,100);cx.beginPath();cx.roundRect(-14,-8,28,16,4);cx.fill();
+cx.fillStyle='#fff';cx.font='500 8px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText('SC',0,0);cx.restore();
+if(scX>200)lbl('Scooter approaching',scX,82);
+let rx,ry;if(p<.4){let pp=p/.4;rx=60+e(pp)*180;ry=190;}
+else if(p<.65){rx=240;ry=190;lbl('Holding stable lane',rx,ry-24);}
+else{let pp=(p-.65)/.35;rx=240+e(pp)*360;ry=190;}
+pth([[60,190],[240,190],[600,190]]);robot(rx,ry);
+if(p>.3&&p<.6){cx.strokeStyle=cl.tx2;cx.lineWidth=.5;cx.setLineDash([2,2]);cx.beginPath();cx.moveTo(rx,100);cx.lineTo(rx,280);cx.stroke();cx.setLineDash([]);lbl('Stable lane',rx+40,250);}}},
+
+{title:'2.8 Temporary obstructions and short-lived blockages',desc:'For transient obstacles (delivery carts, bins, temporarily stopped vehicles), robot stops at safe distance and waits a bounded time. If path clears: resume at cautious speed. If obstruction persists past threshold: treat as true blockage, request help.',
+doTxt:'Wait bounded time, resume if cleared, escalate if persistent',dontTxt:'Squeeze through momentary gaps below clearance thresholds',dur:8000,
+draw(p){bg();let cl=C();let gone=p>.55;
+if(!gone){cx.fillStyle=cl.blk;cx.beginPath();cx.roundRect(340,120,50,60,4);cx.fill();lbl('Delivery cart',365,110);let pp=Math.min(1,p/.5);ped(365+pp*10,150-pp*5);}
+else{let pp=(p-.55)/.1;if(pp<1){cx.globalAlpha=1-pp;cx.fillStyle=cl.blk;cx.beginPath();cx.roundRect(340,120,50,60,4);cx.fill();cx.globalAlpha=1;}}
+let rx,ry;if(p<.2){let pp=p/.2;rx=40+e(pp)*210;ry=160;}
+else if(p<.55){rx=250;ry=160;let w=Math.round((p-.2)/.35*100);lbl('Waiting... ('+w+'%)',rx,ry-24);}
+else if(p<.65){rx=250;ry=160;lbl('Path clear!',rx,ry-24);}
+else{let pp=(p-.65)/.35;rx=250+e(pp)*370;ry=160;}
+robot(rx,ry);if(p>=.2&&p<.55){cx.fillStyle=cl.dngS;cx.beginPath();cx.arc(rx+24,ry,3,0,Math.PI*2);cx.fill();}}},
+
+{title:'2.9 Vegetation and greenery along sidewalk edges',desc:'Vegetation is a soft, non-rigid element. Robot may brush against leaves and small branches as long as no rigid obstacles are behind the foliage and the robot stays within STA. Avoids unnecessary stops for thin bushes pedestrians would walk past.',
+doTxt:'Brush past soft foliage if no rigid obstacle behind, stay in STA',dontTxt:'Hard-stop for every thin branch or bush overhang',dur:5000,
+draw(p){bg();bush(80,40,60,28);bush(220,36,50,24);bush(420,38,70,30);bush(560,40,55,26);
+lbl('Soft vegetation overhang',340,70);let cl=C();cx.strokeStyle=cl.veg;cx.lineWidth=.5;cx.setLineDash([3,3]);cx.beginPath();cx.moveTo(40,55);cx.lineTo(640,55);cx.stroke();cx.setLineDash([]);
+let rx=40+e(p)*580,wb=Math.sin(p*Math.PI*8)*3;pth([[40,130],[640,130]]);robot(rx,130+wb*.3);
+let nb=(rx>60&&rx<130)||(rx>200&&rx<260)||(rx>400&&rx<480)||(rx>540&&rx<610);
+if(nb){lbl('Light brush OK',rx,160);cx.fillStyle=cl.veg;cx.globalAlpha=.3;cx.beginPath();cx.arc(rx,100,20,0,Math.PI*2);cx.fill();cx.globalAlpha=1;}}}
+];
+
+function go(i){cur=i;t=0;
+document.querySelectorAll('.nav-btn').forEach((b,j)=>b.classList.toggle('active',j===i));
+let sc=scenes[i];
+document.getElementById('stitle').textContent=sc.title;
+document.getElementById('desc').textContent=sc.desc;
+document.getElementById('do-tag').textContent='\u2713 '+sc.doTxt;
+document.getElementById('dont-tag').textContent='\u2717 '+sc.dontTxt;
+document.getElementById('status').textContent='Playing...';
+if(raf)cancelAnimationFrame(raf);let start=null;
+function frame(ts){if(!start)start=ts;t=ts-start;let p=Math.min(1,t/sc.dur);
+cx.clearRect(0,0,W,H);sc.draw(p);
+if(p<1){raf=requestAnimationFrame(frame);}
+else{document.getElementById('status').textContent='Done \u2014 tap Replay or use Prev/Next';raf=null;}}
+raf=requestAnimationFrame(frame);}
+function replay(){go(cur);}
+function prev(){go((cur-1+scenes.length)%scenes.length);}
+function next(){go((cur+1)%scenes.length);}
+go(0);
+</script>
+</body>
+</html>
